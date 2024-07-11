@@ -119,7 +119,7 @@ const Menu: React.FC = () => {
         try {
             api['info']({ key: 'export', message: '导出微信读书笔记', description: `《${title}》全书标注导出中，请稍等...`, duration: null });
             await loadImage();
-            const bookId = await getLocalStorageData(`${title}-bookId`) as string;
+            const bookId = await getBookId(title) as string;
             if (!bookId) {
                 api['error']({ key: 'export', message: '导出微信读书笔记', description: `信息缺失，请点击上一页(或下一页)，加载更多信息后重试！`, duration: 10 });
                 return false;
@@ -140,7 +140,7 @@ const Menu: React.FC = () => {
         try {
             api['info']({ key: 'export', message: '导出微信读书笔记', description: `《${title}》热门标注导出中，请稍等...`, duration: null });
             await loadImage();
-            const bookId = await getLocalStorageData(`${title}-bookId`) as string;
+            const bookId = await getBookId(title) as string;
             if (!bookId) {
                 api['error']({ key: 'export', message: '导出微信读书笔记', description: `信息缺失，请点击上一页(或下一页)，加载更多信息后重试！`, duration: 10 });
                 return false;
@@ -152,6 +152,27 @@ const Menu: React.FC = () => {
         } catch (error) {
             console.error('error occurred during export:', error);
             api['error']({ key: 'export', message: '导出微信读书笔记', description: `《${title}》热门标注导出失败！可联系三此君，反馈异常详情！${error}`, duration: null });
+        }
+    }
+
+    // 导出 AI 大纲
+    async function onClickExportAIOutline() {
+        const title = getBookTile();
+        try {
+            api['info']({ key: 'export', message: '导出微信读书笔记', description: `《${title}》全书标注导出中，请稍等...`, duration: null });
+            await loadImage();
+            const bookId = await getBookId(title) as string;
+            if (!bookId) {
+                api['error']({ key: 'export', message: '导出微信读书笔记', description: `信息缺失，请点击上一页(或下一页)，加载更多信息后重试！`, duration: 10 });
+                return false;
+            }
+            const content = await exportBookMarks(bookId, title, false) as string;
+            setIsModalOpen(true);
+            setMarkdownContent(content);
+            api['success']({ key: 'export', message: '导出微信读书笔记', description: `《${title}》 全书标注已成功导出!`, duration: 5 });
+        } catch (error) {
+            console.error('Error occurred during export:', error);
+            api['error']({ key: 'export', message: '导出微信读书笔记', description: `《${title}》全书标注导出失败！可联系三此君，反馈异常详情！${error}`, duration: 10 });
         }
     }
 
@@ -201,7 +222,7 @@ const Menu: React.FC = () => {
                 resolve(undefined);
                 return;
             }
-            api['info']({ key: 'export', message: '导出微信读书笔记', description: '图片加载中，首次导出时会加载图片，如果图片加载有问题，可在设置也开启强制加载图片后重试...', duration: null });
+            api['info']({ key: 'export', message: '导出微信读书笔记', description: '图片加载中，首次导出时会加载图片，如果图片加载有问题，可在设置页开启强制加载图片后重试...', duration: null });
             try {
                 const catalogItem = document.querySelector('.readerControls_item.catalog') as HTMLElement;
                 simulateClick(catalogItem);
@@ -218,6 +239,8 @@ const Menu: React.FC = () => {
                 }
                 readerCatalog.setAttribute('style', 'display: none;');
                 simulateClick(catalogItem);
+                const isImageLoadedKey = `${getBookTile()}-isImageLoaded`;
+                chrome.storage.local.set({ [isImageLoadedKey]: true }, () => { console.log("image load success."); });
             } catch (error) {
                 console.log('simulateClick catalogItem error: ', error);
             }
@@ -240,6 +263,21 @@ const Menu: React.FC = () => {
             chrome.storage.local.set({ [isImageLoadedKey]: true }, () => { console.log("image load success."); });
             resolve(); // 图片加载完成，解析Promise
         }
+    }
+
+    async function getBookId(title:string) {
+        let bookId = await getLocalStorageData(`${title}-bookId`) as string;
+        if (!bookId) {
+            const nextPageButton = document.querySelector('.readerFooter_button, .renderTarget_pager_button_right');
+            console.log('nextPageButton', nextPageButton);
+            if (nextPageButton) {
+                var evt = new MouseEvent("click", { bubbles: true, cancelable: true, clientX: 100, clientY: 100 });
+                nextPageButton.dispatchEvent(evt);
+                await sleep(1500)
+            }
+            bookId = await getLocalStorageData(`${title}-bookId`) as string;
+        }
+        return bookId;
     }
 
     // 初始化图片加载器
