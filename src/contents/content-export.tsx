@@ -29,7 +29,8 @@ export const getRootContainer = async () => {
 };
 
 const Exporter: React.FC = () => {
-    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isExportToLocalModalOpen, setIsExportToLocalModalOpen] = useState(false);
+    const [isExportToNotionModalOpen, setIsExportToNotionModalOpen] = useState(false);
     const [form] = Form.useForm();
     const [api, contextHolder] = notification.useNotification();
 
@@ -46,8 +47,8 @@ const Exporter: React.FC = () => {
         });
     }, []);
 
-    async function showModal() {
-        setIsModalOpen(true);
+    async function showExportToNotionModal() {
+        setIsExportToNotionModalOpen(true);
         chrome.storage.local.get(
             ["databaseUrl", "notionToken"],
             (result) => {
@@ -63,18 +64,18 @@ const Exporter: React.FC = () => {
     };
 
     async function onClickExportAllToNotion() {
-        setIsModalOpen(false);
+        setIsExportToNotionModalOpen(false);
         const { databaseUrl, notionToken } = form.getFieldsValue();
         if (!databaseUrl || !notionToken) {
-            api['error']({key: 'export', message: '全量导出微信读书笔记', description: '请先查看使用说明，设置 Notion Database ID, Notion Token！', duration: null });
+            api['error']({ key: 'export', message: '全量导出微信读书笔记', description: '请先查看使用说明，设置 Notion Database ID, Notion Token！', duration: null });
             return;
         }
         console.log('onClickExportAllToLocal', databaseUrl, notification);
-        chrome.runtime.sendMessage({ type: "exportAllToNotion", databaseUrl: databaseUrl, notionToken: notionToken }, (resp) => {console.log('exportAllToNotion', resp);});
+        chrome.runtime.sendMessage({ type: "exportAllToNotion", databaseUrl: databaseUrl, notionToken: notionToken }, (resp) => { console.log('exportAllToNotion', resp); });
     }
 
     async function onClickExportAllToLocal() {
-        setIsModalOpen(false);
+        setIsExportToLocalModalOpen(false);
         const zip = new JSZip()
         let noMarkCount = 0;
         try {
@@ -83,11 +84,11 @@ const Exporter: React.FC = () => {
             for (let i = 0; i < shelf.books.length; i++) {
                 const book = shelf.books[i];
                 try {
-                    api['info']({ key: 'exportAllToLocal', message:'全量导出微信读书笔记', description: `正在导出《${book.title}》，当前进度 ${i + 1} / ${shelf.books.length} ，导出完成前请勿关闭或刷新本页面，`, duration: null, });
+                    api['info']({ key: 'exportAllToLocal', message: '全量导出微信读书笔记', description: `正在导出《${book.title}》，当前进度 ${i + 1} / ${shelf.books.length} ，导出完成前请勿关闭或刷新本页面，`, duration: null, });
                     const content = await exportBookMarks(book.bookId, book.title, false);
-                    if(content && !content.includes("没有任何笔记")) {
+                    if (content && !content.includes("没有任何笔记")) {
                         zip.file(`${book.title}.md`, content);
-                    }else{
+                    } else {
                         noMarkCount++;
                     }
                 } catch (error) {
@@ -95,10 +96,10 @@ const Exporter: React.FC = () => {
                 }
             }
             const f = await zip.generateAsync({ type: 'blob' });
-            api['success']({ key: 'exportAllToLocal', message:'全量导出微信读书笔记', description: `导出完成，共处理 ${shelf.books.length } 本书籍，其中 ${noMarkCount} 本书籍没有笔记，成功导出 ${shelf.books.length-noMarkCount} 篇笔记。`, duration: null, });
+            api['success']({ key: 'exportAllToLocal', message: '全量导出微信读书笔记', description: `导出完成，共处理 ${shelf.books.length} 本书籍，其中 ${noMarkCount} 本书籍没有笔记，成功导出 ${shelf.books.length - noMarkCount} 篇笔记。`, duration: null, });
             saveAs(f, `weread-toolbox-export-${getCurrentTimestamp()}.zip`);
         } catch (error) {
-            api['error']({ key: 'exportAllToLocal', message:'全量导出微信读书笔记', description: `导出失败，可联系三此君，反馈异常详情！${error}`, duration: null, })
+            api['error']({ key: 'exportAllToLocal', message: '全量导出微信读书笔记', description: `导出失败，可联系三此君，反馈异常详情！${error}`, duration: null, })
             console.error("export all to local error:", error);
             return false;
         }
@@ -107,10 +108,46 @@ const Exporter: React.FC = () => {
     return (
         <>
             {contextHolder}
-            <Button onClick={showModal} shape="round" type="text" className="shelf_download_app">全量导出微信读书笔记</Button>
-            <Modal title="全量导出微信读书笔记" open={isModalOpen} onOk={onClickExportAllToLocal} okText="下载" onCancel={()=>setIsModalOpen(false)} cancelText="取消" >
-                <Typography.Paragraph>全量微信读书笔记，只会导出你的书架中并且有笔记的书籍。</Typography.Paragraph>
+            <Button onClick={() => setIsExportToLocalModalOpen(true)} shape="round" type="text" className="shelf_download_app" style={{ marginRight: 10 }}>全量下载笔记</Button>
+            <Button onClick={showExportToNotionModal} shape="round" type="text" className="shelf_download_app">全量笔记同步Notion</Button>
+            <Modal title="全量下载微信读书笔记" open={isExportToLocalModalOpen} onOk={onClickExportAllToLocal} okText="下载" onCancel={() => setIsExportToLocalModalOpen(false)} cancelText="取消" >
+                <Typography.Paragraph>全量导出微信读书笔记，只会导出你的书架中有笔记的书籍。</Typography.Paragraph>
                 <Typography.Paragraph>有任何问题可以在插件关于页面联系三此君反馈问题，感谢支持。</Typography.Paragraph>
+            </Modal>
+            <Modal title="全量同步微信读书笔记" open={isExportToNotionModalOpen} onOk={onClickExportAllToNotion} okText="同步 Notion" onCancel={() => setIsExportToNotionModalOpen(false)} cancelText="取消" >
+                <Typography.Paragraph>全量同步微信读书笔记，只会同步你的书架中有笔记的书籍。</Typography.Paragraph>
+                <Typography.Paragraph>有任何问题可以在插件关于页面联系三此君反馈问题，感谢支持。</Typography.Paragraph>
+                <Form form={form} labelCol={{ span: 6 }} wrapperCol={{ span: 16 }}>
+                    <Form.Item
+                        label={
+                            <span>
+                                Database Link&nbsp;
+                                <Tooltip title="点击关于->使用说明，查看如何获取 Database Link">
+                                    <QuestionCircleOutlined />
+                                </Tooltip>
+                            </span>
+                        }
+                        name="databaseUrl"
+                        rules={[{ required: true, message: "Please enter the Database Link" }]}
+                    >
+                        <Input placeholder="请输入 Database Link" />
+                    </Form.Item>
+                    <Form.Item
+                        label={
+                            <span>
+                                Notion Token&nbsp;
+                                <Tooltip title="点击关于->使用说明，查看如何获取 Notion Token">
+                                    <QuestionCircleOutlined />
+                                </Tooltip>
+                            </span>
+                        }
+                        name="notionToken"
+                        rules={[{ required: true, message: "Please enter the Notion Token" }]}
+                    >
+                        <Input.Password placeholder="请输入 Notion Token" />
+                    </Form.Item>
+                </Form>
+
             </Modal>
         </>
     )
